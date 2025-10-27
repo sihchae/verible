@@ -98,6 +98,9 @@ struct FormatStyle : public verible::BasicFormatStyle {
   bool port_declarations_right_align_packed_dimensions = false;
   bool port_declarations_right_align_unpacked_dimensions = false;
 
+  // When true, align the closing parenthesis in named port connections.
+  bool named_port_align_closing_parenthesis = false;
+
   // At this time line wrap optimization is problematic and risks ruining
   // otherwise reasonable code.  When set to false, this switch will make the
   // formatter give-up and leave code as-is in cases where it would otherwise

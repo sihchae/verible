@@ -303,7 +303,17 @@ class ActualNamedPortColumnSchemaScanner : public VerilogColumnSchemaScanner {
       case NodeEnum::kParenGroup:
         // Second column starts at the open parenthesis.
         if (Context().DirectParentIs(NodeEnum::kActualNamedPort)) {
-          ReserveNewColumn(node, FlushLeft);
+          if (style_.named_port_align_closing_parenthesis) {
+            // When aligning closing parenthesis, split paren group into
+            // three sub-columns: '(', contents, ')'
+            CHECK_EQ(node.size(), 3);
+            auto *column = ReserveNewColumn(node, FlushLeft);
+            ReserveNewColumn(column, *node[0], FlushLeft);  // '('
+            ReserveNewColumn(column, *node[1], FlushLeft);  // contents
+            ReserveNewColumn(column, *node[2], FlushLeft);  // ')'
+          } else {
+            ReserveNewColumn(node, FlushLeft);
+          }
         }
         break;
       default:
