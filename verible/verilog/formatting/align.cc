@@ -251,6 +251,18 @@ std::function<verible::AlignmentCellScannerFunction(
   };
 }
 
+// Version that takes a function to generate non_tree_column_scanner from style
+template <class ScannerType>
+std::function<verible::AlignmentCellScannerFunction(const FormatStyle &)>
+StyledAlignmentCellScannerGenerator(
+    std::function<verible::NonTreeTokensScannerFunction(const FormatStyle &)>
+        non_tree_scanner_gen) {
+  return [non_tree_scanner_gen](const FormatStyle &vstyle) {
+    return AlignmentCellScannerGenerator<ScannerType>(
+        [vstyle] { return ScannerType(vstyle); }, non_tree_scanner_gen(vstyle));
+  };
+}
+
 // This class marks up token-subranges in named parameter assignments for
 // alignment. e.g. ".parameter_name(value_expression)"
 class ActualNamedParameterColumnSchemaScanner
@@ -1358,6 +1370,61 @@ static void non_tree_column_scanner(
   }
 }
 
+// Specialized scanner for port declarations that can align trailing commas
+static verible::NonTreeTokensScannerFunction
+port_declaration_non_tree_column_scanner(const FormatStyle &style) {
+  return [&style](verible::FormatTokenRange leading_tokens,
+                  verible::FormatTokenRange trailing_tokens,
+                  verible::ColumnPositionTree *column_entries) {
+    static const SyntaxTreePath kLeadingTokensPath = {
+        kLeadingNonTreeTokenPathIndex};
+    static const SyntaxTreePath kTrailingCommaPath = {
+        kTrailingNonTreeTokenPathIndex, 0};
+    static const SyntaxTreePath kTrailingCommentPath = {
+        kTrailingNonTreeTokenPathIndex, 1};
+
+    VLOG(4) << __FUNCTION__ << "\nleading tokens: "
+            << verible::StringSpanOfTokenRange(leading_tokens)
+            << "\ntrailing tokens: "
+            << verible::StringSpanOfTokenRange(trailing_tokens);
+
+    if (!leading_tokens.empty()) {
+      column_entries->Children().emplace_back(verible::ColumnPositionEntry{
+          kLeadingTokensPath, *leading_tokens.front().token, FlushLeft});
+    }
+
+    if (trailing_tokens.empty()) return;
+
+    const auto separator_it =
+        std::find_if(trailing_tokens.begin(), trailing_tokens.end(),
+                     [](const PreFormatToken &tok) {
+                       return tok.TokenEnum() == ',' || tok.TokenEnum() == ':';
+                     });
+
+    auto comment_it = trailing_tokens.begin();
+
+    if (separator_it != trailing_tokens.end()) {
+      AlignmentColumnProperties prop;
+      prop.contains_delimiter = true;
+      // Use FlushRight if the option is enabled, otherwise FlushLeft
+      const auto alignment_prop =
+          style.port_declarations_align_trailing_comma ? FlushRight : prop;
+      const verible::ColumnPositionEntry column{
+          kTrailingCommaPath, *separator_it->token, alignment_prop};
+      column_entries->Children().emplace_back(column);
+
+      comment_it = separator_it + 1;
+    }
+    if (comment_it != trailing_tokens.end() &&
+        (comment_it->token->token_enum() == TK_COMMENT_BLOCK ||
+         comment_it->token->token_enum() == TK_EOL_COMMENT)) {
+      const verible::ColumnPositionEntry column{kTrailingCommentPath,
+                                                *comment_it->token, FlushLeft};
+      column_entries->Children().emplace_back(column);
+    }
+  };
+}
+
 // Global registry of all known alignment handlers for Verilog.
 // This organization lets the same handlers be re-used in multiple
 // syntactic contexts, e.g. data declarations can be module items and
@@ -1384,8 +1451,8 @@ static const AlignmentHandlerMapType &AlignmentHandlerLibrary() {
         function_from_pointer_to_member(
             &FormatStyle::formal_parameters_alignment)}},
       {AlignableSyntaxSubtype::kPortDeclaration,
-       {UnstyledAlignmentCellScannerGenerator<
-            PortDeclarationColumnSchemaScanner>(non_tree_column_scanner),
+       {StyledAlignmentCellScannerGenerator<PortDeclarationColumnSchemaScanner>(
+            port_declaration_non_tree_column_scanner),
         function_from_pointer_to_member(
             &FormatStyle::port_declarations_alignment)}},
       {AlignableSyntaxSubtype::kStructUnionMember,

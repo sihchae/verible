@@ -101,6 +101,9 @@ struct FormatStyle : public verible::BasicFormatStyle {
   // When true, align the closing parenthesis in named port connections.
   bool named_port_align_closing_parenthesis = false;
 
+  // When true, align trailing commas in port declarations.
+  bool port_declarations_align_trailing_comma = false;
+
   // At this time line wrap optimization is problematic and risks ruining
   // otherwise reasonable code.  When set to false, this switch will make the
   // formatter give-up and leave code as-is in cases where it would otherwise
