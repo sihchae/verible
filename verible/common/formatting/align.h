@@ -50,6 +50,9 @@ struct AlignmentColumnProperties {
 
   bool contains_delimiter = false;
 
+  // If true, align this column to column_limit-1 by padding with spaces.
+  bool align_to_column_limit = false;
+
   AlignmentColumnProperties() = default;
 
   explicit constexpr AlignmentColumnProperties(bool flush_left)

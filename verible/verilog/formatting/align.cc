@@ -322,7 +322,12 @@ class ActualNamedPortColumnSchemaScanner : public VerilogColumnSchemaScanner {
             auto *column = ReserveNewColumn(node, FlushLeft);
             ReserveNewColumn(column, *node[0], FlushLeft);  // '('
             ReserveNewColumn(column, *node[1], FlushLeft);  // contents
-            ReserveNewColumn(column, *node[2], FlushLeft);  // ')'
+            // Set align_to_column_limit for closing parenthesis if option is enabled
+            AlignmentColumnProperties closing_paren_props = FlushLeft;
+            if (style_.named_port_align_closing_at_column_limit) {
+              closing_paren_props.align_to_column_limit = true;
+            }
+            ReserveNewColumn(column, *node[2], closing_paren_props);  // ')'
           } else {
             ReserveNewColumn(node, FlushLeft);
           }

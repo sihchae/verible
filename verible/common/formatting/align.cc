@@ -706,7 +706,7 @@ static void ComputeAlignedRowCellSpacings(
     const VectorTree<verible::AlignedColumnConfiguration> &column_configs,
     const VectorTree<verible::AlignmentColumnProperties> &properties,
     const AlignmentRow &row, std::vector<DeferredTokenAlignment> *align_actions,
-    int *accrued_spaces) {
+    int *accrued_spaces, int column_limit, int current_column_position) {
   ColumnsTreePath node_path;
   verible::Path(row, node_path);
   VLOG(2) << TreePathFormatter(node_path) << " " << __FUNCTION__ << std::endl;
@@ -726,6 +726,7 @@ static void ComputeAlignedRowCellSpacings(
               << " unused cell; width: " << total_width;
 
       *accrued_spaces += total_width;
+      current_column_position += total_width;
     } else if (cell.Value().IsComposite()) {
       // Cummulative subcolumns width might be smaller than their parent
       // column's width.
@@ -742,35 +743,62 @@ static void ComputeAlignedRowCellSpacings(
               << "; padding: " << padding << "; flush: "
               << (column_properties_it->Value().flush_left ? "left" : "right");
 
-      if (!column_properties_it->Value().flush_left) *accrued_spaces += padding;
+      if (!column_properties_it->Value().flush_left) {
+        *accrued_spaces += padding;
+        current_column_position += padding;
+      }
       ComputeAlignedRowCellSpacings(*column_config_it, *column_properties_it,
-                                    cell, align_actions, accrued_spaces);
-      if (column_properties_it->Value().flush_left) *accrued_spaces += padding;
+                                    cell, align_actions, accrued_spaces,
+                                    column_limit, current_column_position);
+      if (column_properties_it->Value().flush_left) {
+        *accrued_spaces += padding;
+        current_column_position += padding;
+      }
     } else {
       *accrued_spaces += column_config_it->Value().left_border;
+      current_column_position += column_config_it->Value().left_border;
 
       VLOG(2) << TreePathFormatter(node_path) << " token cell"
               << "; starting token: " << cell.Value().tokens.front().Text();
 
-      // Align by setting the left-spacing based on sum of cell widths
-      // before this one.
-      const int padding =
-          column_config_it->Value().width - cell.Value().compact_width;
       FormatTokenRange::iterator ftoken = cell.Value().tokens.begin();
       int left_spacing;
-      if (column_properties_it->Value().flush_left) {
-        if (column_properties_it->Value().contains_delimiter) {
-          left_spacing = 0;
-          *accrued_spaces += padding;
-        } else {
-          left_spacing = *accrued_spaces;
-          *accrued_spaces = padding;
-        }
-      } else {  // flush right
-        left_spacing = *accrued_spaces + padding;
+      
+      // Check if this column should align to column_limit
+      if (column_properties_it->Value().align_to_column_limit) {
+        const int cell_width = cell.Value().compact_width;
+        const int target_position = column_limit - 1 - cell_width;
+        // Calculate spacing needed to reach target position
+        left_spacing = target_position - current_column_position;
+        if (left_spacing < 0) left_spacing = 0;  // Safety check
         *accrued_spaces = 0;
+        
+        VLOG(2) << TreePathFormatter(node_path)
+                << " align_to_column_limit: target=" << target_position
+                << ", current=" << current_column_position
+                << ", cell_width=" << cell_width
+                << ", left_spacing=" << left_spacing;
+      } else {
+        // Normal alignment logic
+        const int padding =
+            column_config_it->Value().width - cell.Value().compact_width;
+        
+        if (column_properties_it->Value().flush_left) {
+          if (column_properties_it->Value().contains_delimiter) {
+            left_spacing = 0;
+            *accrued_spaces += padding;
+          } else {
+            left_spacing = *accrued_spaces;
+            *accrued_spaces = padding;
+          }
+        } else {  // flush right
+          left_spacing = *accrued_spaces + padding;
+          *accrued_spaces = 0;
+        }
       }
+      
       align_actions->emplace_back(ftoken, left_spacing);
+      current_column_position += cell.Value().compact_width + left_spacing;
 
       VLOG(2) << TreePathFormatter(node_path)
               << " ... left_spacing: " << left_spacing;
@@ -785,13 +813,13 @@ static void ComputeAlignedRowCellSpacings(
 static std::vector<DeferredTokenAlignment> ComputeAlignedRowSpacings(
     const VectorTree<verible::AlignedColumnConfiguration> &column_configs,
     const VectorTree<verible::AlignmentColumnProperties> &properties,
-    const AlignmentRow &row) {
+    const AlignmentRow &row, int column_limit, int indentation) {
   VLOG(2) << __FUNCTION__ << "; row:\n" << row;
   std::vector<DeferredTokenAlignment> align_actions;
   int accrued_spaces = 0;
 
   ComputeAlignedRowCellSpacings(column_configs, properties, row, &align_actions,
-                                &accrued_spaces);
+                                &accrued_spaces, column_limit, indentation);
 
   VLOG(2) << "end of " << __FUNCTION__;
   return align_actions;
@@ -981,9 +1009,13 @@ AlignablePartitionGroup::CalculateAlignmentSpacings(
   // partitions and alignment matrix representation.
   result.align_actions_2D.reserve(result.matrix.size());
 
+  // Get indentation from the first row
+  const int indentation = rows.front()->Value().IndentationSpaces();
+  
   for (const auto &row : result.matrix) {
     result.align_actions_2D.push_back(
-        ComputeAlignedRowSpacings(column_configs, column_properties, row));
+        ComputeAlignedRowSpacings(column_configs, column_properties, row,
+                                  column_limit, indentation));
   }
   return result;
 }

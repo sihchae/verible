@@ -102,6 +102,9 @@ ABSL_FLAG(bool, port_declarations_right_align_unpacked_dimensions, false,
 ABSL_FLAG(bool, named_port_align_closing_parenthesis, false,
           "If true, align the closing parenthesis in named port connections.");
 
+ABSL_FLAG(bool, named_port_align_closing_at_column_limit, false,
+          "If true, pad spaces to align closing parenthesis at column_limit-1.");
+
 ABSL_FLAG(bool, port_declarations_align_trailing_comma, false,
           "If true, align trailing commas in port declarations.");
 
@@ -142,6 +145,7 @@ void InitializeFromFlags(FormatStyle *style) {
   STYLE_FROM_FLAG(port_declarations_right_align_packed_dimensions);
   STYLE_FROM_FLAG(port_declarations_right_align_unpacked_dimensions);
   STYLE_FROM_FLAG(named_port_align_closing_parenthesis);
+  STYLE_FROM_FLAG(named_port_align_closing_at_column_limit);
   STYLE_FROM_FLAG(port_declarations_align_trailing_comma);
   STYLE_FROM_FLAG(try_wrap_long_lines);
   STYLE_FROM_FLAG(expand_coverpoints);
